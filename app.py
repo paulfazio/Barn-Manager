@@ -1,6 +1,6 @@
-import requests
 from flask import Flask, render_template, request, redirect, url_for
 import sqlite3
+import requests
 from geopy.geocoders import Nominatim
 
 app = Flask(__name__)
@@ -10,6 +10,114 @@ def get_db_connection():
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     return conn
+
+# Database Initialization
+with get_db_connection() as conn:
+    conn.execute("CREATE TABLE IF NOT EXISTS horses (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS blankets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, horse_id INTEGER NOT NULL,
+                    name TEXT NOT NULL, min_temp INTEGER, max_temp INTEGER,
+                    FOREIGN KEY (horse_id) REFERENCES horses (id) ON DELETE CASCADE)""")
+    # Added hay and shavings columns to settings
+    conn.execute("""CREATE TABLE IF NOT EXISTS settings (
+                    id INTEGER PRIMARY KEY, 
+                    address TEXT, 
+                    hay INTEGER DEFAULT 0, 
+                    shavings INTEGER DEFAULT 0)""")
+    # Ensure a settings row exists
+    conn.execute("INSERT OR IGNORE INTO settings (id, hay, shavings) VALUES (1, 0, 0)")
+
+#def get_weather_data(address):
+#    try:
+#        geolocator = Nominatim(user_agent="horse_blanket_app")
+#        location = geolocator.geocode(address)
+#        if not location: return None
+#        url = "https://api.open-meteo.com/v1/forecast"
+#        params = {
+#            "latitude": location.latitude, "longitude": location.longitude,
+#            "hourly": "temperature_2m,apparent_temperature,precipitation,weathercode",
+#            "temperature_unit": "fahrenheit", "forecast_days": 1, "timezone": "auto"
+#        }
+#        response = requests.get(url, params=params).json()
+#        hourly = response.get('hourly', {})
+#        return {
+#            "avg_temp": sum(hourly['temperature_2m']) / 24,
+#            "min_chill": min(hourly['apparent_temperature']),
+#            "total_precip": sum(hourly['precipitation']),
+#            "max_code": max(hourly['weathercode'])
+#        }
+#    except: return None
+
+@app.route("/")
+def main_page():
+    conn = get_db_connection()
+    settings = conn.execute("SELECT * FROM settings WHERE id = 1").fetchone()
+    
+    weather_info = None
+    recommendations = []
+    
+    if settings and settings['address']:
+        weather_info = get_weather_data(settings['address'])
+        horses = conn.execute("SELECT * FROM horses").fetchall()
+        for horse in horses:
+            blankets = conn.execute("SELECT * FROM blankets WHERE horse_id = ?", (horse['id'],)).fetchall()
+            
+            if weather_info and (weather_info['total_precip'] > 0.05 or weather_info['max_code'] >= 51):
+                rec = "Inside (Rain/Snow)"
+            elif weather_info:
+                found_blanket = "No blanket needed"
+                chill = weather_info['min_chill']
+                for b in blankets:
+                    if b['min_temp'] <= chill <= b['max_temp']:
+                        found_blanket = b['name']
+                        break
+                rec = found_blanket
+            else:
+                rec = "Weather unavailable"
+            recommendations.append({'name': horse['name'], 'recommendation': rec})
+
+    conn.close()
+    return render_template("main.html", settings=settings, weather=weather_info, recs=recommendations)
+
+@app.route("/update_inventory/<item>/<int:delta>")
+def update_inventory(item, delta):
+    if item not in ['hay', 'shavings']: return redirect(url_for("main_page"))
+    
+    conn = get_db_connection()
+    # Using MAX(0, ...) to prevent negative inventory
+    conn.execute(f"UPDATE settings SET {item} = MAX(0, {item} + ?) WHERE id = 1", (delta,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("main_page"))
+
+@app.route("/set_inventory", methods=["POST"])
+def set_inventory():
+    hay_count = request.form.get("hay", type=int)
+    shavings_count = request.form.get("shavings", type=int)
+    
+    conn = get_db_connection()
+    if hay_count is not None:
+        conn.execute("UPDATE settings SET hay = ? WHERE id = 1", (hay_count,))
+    if shavings_count is not None:
+        conn.execute("UPDATE settings SET shavings = ? WHERE id = 1", (shavings_count,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("main_page"))
+    
+# ... (Previous routes for configure_horses, configure_address, add_blanket, delete_horse remain same)
+
+#import requests
+#from flask import Flask, render_template, request, redirect, url_for
+#import sqlite3
+#from geopy.geocoders import Nominatim
+
+#app = Flask(__name__)
+#DB_NAME = "database.db"
+
+#def get_db_connection():
+#    conn = sqlite3.connect(DB_NAME)
+#    conn.row_factory = sqlite3.Row
+#    return conn
 
 def get_weather_data(address):
     try:
@@ -45,52 +153,52 @@ def get_weather_data(address):
         print(f"Error fetching weather: {e}")
         return None
 
-@app.route("/")
-def main_page():
-    conn = get_db_connection()
-    addr_row = conn.execute("SELECT address FROM settings WHERE id = 1").fetchone()
-    address = addr_row['address'] if addr_row else None
-    
-    weather_info = None
-    recommendations = []
-    
-    if address:
-        weather_info = get_weather_data(address)
-        if weather_info:
-            horses = conn.execute("SELECT * FROM horses").fetchall()
-            for horse in horses:
-                blankets = conn.execute("SELECT * FROM blankets WHERE horse_id = ?", (horse['id'],)).fetchall()
-                
-                # Logic: If significant precipitation or snow codes (e.g., code 51+)
-                if weather_info['total_precip'] > 0.05 or weather_info['max_code'] >= 51:
-                    rec = "Stay Inside (Precipitation Expected)"
-                else:
-                    # Find blanket where wind chill is within range
-                    found_blanket = "No blanket needed"
-                    chill = weather_info['min_chill']
-                    for b in blankets:
-                        if b['min_temp'] <= chill <= b['max_temp']:
-                            found_blanket = b['name']
-                            break
-                    rec = found_blanket
-                
-                recommendations.append({'name': horse['name'], 'recommendation': rec})
-
-    conn.close()
-    return render_template("main.html", address=address, weather=weather_info, recs=recommendations)
+#@app.route("/")
+#def main_page():
+#    conn = get_db_connection()
+#    addr_row = conn.execute("SELECT address FROM settings WHERE id = 1").fetchone()
+#    address = addr_row['address'] if addr_row else None
+#    
+#    weather_info = None
+#    recommendations = []
+#    
+#    if address:
+#        weather_info = get_weather_data(address)
+#        if weather_info:
+#            horses = conn.execute("SELECT * FROM horses").fetchall()
+#            for horse in horses:
+#                blankets = conn.execute("SELECT * FROM blankets WHERE horse_id = ?", (horse['id'],)).fetchall()
+#                
+#                # Logic: If significant precipitation or snow codes (e.g., code 51+)
+#                if weather_info['total_precip'] > 0.05 or weather_info['max_code'] >= 51:
+#                    rec = "Stay Inside (Precipitation Expected)"
+#                else:
+#                    # Find blanket where wind chill is within range
+#                    found_blanket = "No blanket needed"
+#                    chill = weather_info['min_chill']
+#                    for b in blankets:
+#                        if b['min_temp'] <= chill <= b['max_temp']:
+#                            found_blanket = b['name']
+#                            break
+#                    rec = found_blanket
+#                
+#                recommendations.append({'name': horse['name'], 'recommendation': rec})
+#
+#    conn.close()
+#    return render_template("main.html", address=address, weather=weather_info, recs=recommendations)
 
 # ... (Include other routes: /configure_horses, /configure_address, /add_blanket from previous step)
 
 
-# Database Initialization
-with get_db_connection() as conn:
-    conn.execute("CREATE TABLE IF NOT EXISTS horses (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)")
-    conn.execute("""CREATE TABLE IF NOT EXISTS blankets (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, horse_id INTEGER NOT NULL,
-                    name TEXT NOT NULL, min_temp INTEGER, max_temp INTEGER,
-                    FOREIGN KEY (horse_id) REFERENCES horses (id) ON DELETE CASCADE)""")
-    # Table to store address (using ID 1 for simplicity)
-    conn.execute("CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, address TEXT)")
+## Database Initialization
+#with get_db_connection() as conn:
+#    conn.execute("CREATE TABLE IF NOT EXISTS horses (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)")
+#    conn.execute("""CREATE TABLE IF NOT EXISTS blankets (
+#                    id INTEGER PRIMARY KEY AUTOINCREMENT, horse_id INTEGER NOT NULL,
+#                    name TEXT NOT NULL, min_temp INTEGER, max_temp INTEGER,
+#                    FOREIGN KEY (horse_id) REFERENCES horses (id) ON DELETE CASCADE)""")
+#    # Table to store address (using ID 1 for simplicity)
+#    conn.execute("CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, address TEXT)")
 
 @app.route("/configure_horses", methods=["GET", "POST"])
 def configure_horses():

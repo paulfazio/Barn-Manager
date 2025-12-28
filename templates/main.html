@@ -1,47 +1,96 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Horse Blanket Hub</title>
+    <title>Horse Care Hub</title>
     <style>
-        .weather-box { background: #eef; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
+        .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: #fdfdfd; }
+        .inventory-item { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; }
+        .btn { padding: 5px 10px; text-decoration: none; background: #eee; border: 1px solid #ccc; color: black; border-radius: 4px; }
         .alert { color: #d9534f; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border-bottom: 1px solid #eee; padding: 10px; text-align: left; }
     </style>
 </head>
 <body>
     <h1>Horse Care Dashboard</h1>
-    
-    {% if not address %}
-        <p>Please <a href="{{ url_for('configure_address') }}">set an address</a> to see weather and recommendations.</p>
-    {% elif not weather %}
-        <p>Could not retrieve weather for: {{ address }}. Check your address format.</p>
-    {% else %}
-        <div class="weather-box">
-            <h3>24-Hour Forecast for {{ address }}</h3>
-            <p><strong>Avg Temp:</strong> {{ "%.1f"|format(weather.avg_temp) }}°F</p>
-            <p><strong>Lowest Wind Chill:</strong> {{ "%.1f"|format(weather.min_chill) }}°F</p>
-            {% if weather.total_precip > 0.05 %}
-                <p class="alert">Notice: Rain or Snow is likely ({{ "%.2f"|format(weather.total_precip) }}").</p>
+
+    <div class="dashboard-grid">
+        <div class="card">
+            <h3>Forecast & Blanketing</h3>
+            {% if not settings.address %}
+                <p><a href="{{ url_for('configure_address') }}">Set address</a> for weather updates.</p>
+            {% else %}
+                {% if weather %}
+                    <p>Chill Low: <strong>{{ "%.1f"|format(weather.min_chill) }}°F</strong></p>
+                    {% if weather.total_precip > 0.05 %}<p class="alert">Precipitation Expected</p>{% endif %}
+                {% endif %}
+                
+                <table>
+                    {% for rec in recs %}
+                    <tr>
+                        <td>{{ rec.name }}</td>
+                        <td><strong>{{ rec.recommendation }}</strong></td>
+                    </tr>
+                    {% endfor %}
+                </table>
             {% endif %}
         </div>
 
-        <h2>Recommendations</h2>
-        <table>
-            <tr><th>Horse</th><th>Recommended Blanket</th></tr>
-            {% for rec in recs %}
-            <tr>
-                <td>{{ rec.name }}</td>
-                <td><strong>{{ rec.recommendation }}</strong></td>
-            </tr>
-            {% endfor %}
-        </table>
-    {% endif %}
+        <div class="card">
+            <h3>Barn Inventory</h3>
+            <form action="{{ url_for('set_inventory') }}" method="POST" id="inventoryForm">
+                
+                <div class="inventory-item">
+                    <label for="hay"><strong>Bales of Hay:</strong></label>
+                    <select name="hay" onchange="this.form.submit()">
+                        {% for i in range(201) %}
+                            <option value="{{ i }}" {% if settings.hay == i %}selected{% endif %}>{{ i }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+        
+                <div class="inventory-item">
+                    <label for="shavings"><strong>Bags of Shavings:</strong></label>
+                    <select name="shavings" onchange="this.form.submit()">
+                        {% for i in range(101) %}
+                            <option value="{{ i }}" {% if settings.shavings == i %}selected{% endif %}>{{ i }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+            </form>
+            <p style="font-size: 0.8em; color: #666; margin-top: 15px;">
+                <em>Inventory updates automatically on selection.</em>
+            </p>
+        </div>
+
+        <!--
+        <div class="card">
+            <h3>Barn Inventory</h3>
+            <div class="inventory-item">
+                <span><strong>Bales of Hay:</strong> {{ settings.hay }}</span>
+                <div>
+                    <a href="{{ url_for('update_inventory', item='hay', delta=-1) }}" class="btn">-</a>
+                    <a href="{{ url_for('update_inventory', item='hay', delta=1) }}" class="btn">+</a>
+                </div>
+            </div>
+            <div class="inventory-item">
+                <span><strong>Bags of Shavings:</strong> {{ settings.shavings }}</span>
+                <div>
+                    <a href="{{ url_for('update_inventory', item='shavings', delta=-1) }}" class="btn">-</a>
+                    <a href="{{ url_for('update_inventory', item='shavings', delta=1) }}" class="btn">+</a>
+                </div>
+            </div>
+        </div>
+        -->
+    </div>
 
     <hr>
-    <nav>
-        <a href="{{ url_for('configure_horses') }}">Manage Horses & Blankets</a> | 
-        <a href="{{ url_for('configure_address') }}">Update Address</a>
-    </nav>
+    <p>
+        <a href="{{ url_for('configure_horses') }}">Configure Horses</a> | 
+        <a href="{{ url_for('configure_address') }}">Configure Address</a>
+    </p>
 </body>
 </html>
