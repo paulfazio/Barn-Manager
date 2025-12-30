@@ -1,15 +1,73 @@
 <!DOCTYPE html>
 <html>
-<head><title>Configure Settings</title></head>
+<head>
+    <title>Configure Settings</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
+        .flex-row { display: flex; flex-direction: row; align-content: stretch; }
+        .flex-column { display: flex; flex-direction: column; align-content: stretch; }
+        .card { border: 1px solid #ddd; padding: 15px; margin: 15px; border-radius: 8px; background: #fdfdfd; }
+        .inventory-item { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; }
+        .btn { padding: 5px 10px; text-decoration: none; background: #eee; border: 1px solid #ccc; color: black; border-radius: 4px; }
+        .alert { color: #d9534f; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border-bottom: 1px solid #eee; padding: 10px; text-align: left; }
+    </style>
+</head>
 <body>
-    <h2>Configure Settings</h2>
-    <form method="POST">
-        <label>Street Address:</label><br>
-        <input type="text" name="address" value="{{ current_address }}" style="width:300px;" required>
-        <br><br>
-        <button type="submit">Save</button>
-    </form>
-    <br>
+    <h1>Settings</h1>
+    <div class="card">
+        <h2>Address</h2>
+        <form method="POST">
+            <input type="hidden" name="form_id" value="address_form">
+            <label>Street Address:</label><br>
+            <input type="text" name="address" value="{{ current_address }}" style="width:300px;" required><br>
+            <br>
+            <button type="submit">Save</button>
+        </form>
+    </div>
+    <div class="card">
+        <h2>Veterinarians</h2>
+        {% for vet in veterinarians %}
+        <div class="card">
+            <h3>{{ vet.name }}</h3>
+            {{ vet.phone }}
+        </div>
+        {% endfor %}
+        <form method="POST">
+            <input type="hidden" name="form_id" value="veterinarian_form">
+            <label>Name:</label><br>
+            <input type="text" name="name" style="width:300px;" required><br>
+            <br>
+            <label>Phone:</label><br>
+            <input type="text" name="phone" style="width:300px;" required><br>
+            <br>
+            <button type="submit">Save</button>
+        </form>
+    </div>
+    <div class="card">
+        <h2>Reminders</h2>
+        <div class="card">
+            <h3>Hay</h3>
+            <form method="POST">
+                <input type="hidden" name="form_id" value="hay_form">
+                <label>Minimum bales before reordering:</label><br>
+                <input type="number" name="minimum_bales" value="{{ minimum_bales }}"><br>
+                <br>
+                <button type="submit">Save</button>
+            </form>
+        </div>
+        <div class="card">
+            <h3>Shavings</h3>
+            <form method="POST">
+                <input type="hidden" name="form_id" value="shavings_form">
+                <label>Minimum bags of shavings before reordering:</label><br>
+                <input type="number" name="minimum_shavings" value="{{ minimum_shavings }}"><br>
+                <br>
+                <button type="submit">Save</button>
+            </form>
+        </div>
+    </div>
     <a href="{{ url_for('main_page') }}">Cancel</a>
 </body>
 </html>

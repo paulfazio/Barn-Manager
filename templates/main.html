@@ -41,20 +41,12 @@
                 
                 <div class="inventory-item">
                     <label for="hay"><strong>Bales of Hay:</strong></label>
-                    <select name="hay" onchange="this.form.submit()">
-                        {% for i in range(201) %}
-                            <option value="{{ i }}" {% if settings.hay == i %}selected{% endif %}>{{ i }}</option>
-                        {% endfor %}
-                    </select>
+                    <input type="number" name="hay" value="{{ bales_on_hand }}" onchange="this.form.submit()">
                 </div>
         
                 <div class="inventory-item">
                     <label for="shavings"><strong>Bags of Shavings:</strong></label>
-                    <select name="shavings" onchange="this.form.submit()">
-                        {% for i in range(101) %}
-                            <option value="{{ i }}" {% if settings.shavings == i %}selected{% endif %}>{{ i }}</option>
-                        {% endfor %}
-                    </select>
+                    <input type="number" name="shavings" value="{{ shavings_on_hand }}" onchange="this.form.submit()">
                 </div>
                 
             </form>

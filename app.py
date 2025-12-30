@@ -17,10 +17,14 @@ with get_db_connection() as conn:
     # Existing tables
     conn.execute("CREATE TABLE IF NOT EXISTS horses (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)")
     conn.execute("CREATE TABLE IF NOT EXISTS blankets (id INTEGER PRIMARY KEY AUTOINCREMENT, horse_id INTEGER NOT NULL, name TEXT NOT NULL, min_temp INTEGER, max_temp INTEGER, FOREIGN KEY (horse_id) REFERENCES horses (id) ON DELETE CASCADE)")
-    conn.execute("CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, address TEXT, hay INTEGER DEFAULT 0, shavings INTEGER DEFAULT 0)")
+    conn.execute("CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, address TEXT)")
     conn.execute("CREATE TABLE IF NOT EXISTS medications (id INTEGER PRIMARY KEY AUTOINCREMENT, horse_id INTEGER NOT NULL, med_name TEXT NOT NULL, dose TEXT NOT NULL, schedule_time TEXT NOT NULL, FOREIGN KEY (horse_id) REFERENCES horses (id) ON DELETE CASCADE)")
     conn.execute("CREATE TABLE IF NOT EXISTS med_log (id INTEGER PRIMARY KEY AUTOINCREMENT, med_id INTEGER NOT NULL, horse_id INTEGER NOT NULL, admin_date DATE NOT NULL, admin_time TEXT NOT NULL)")
-
+    conn.execute("CREATE TABLE IF NOT EXISTS veterinarians (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, phone TEXT)")
+    conn.execute("CREATE TABLE IF NOT EXISTS farriers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, phone TEXT)")
+    conn.execute("CREATE TABLE IF NOT EXISTS hay_bales (id INTEGER PRIMARY KEY, minimum INTEGER DEFAULT 0, on_hand INTEGER DEFAULT 0)")
+    conn.execute("CREATE TABLE IF NOT EXISTS shavings (id INTEGER PRIMARY KEY, minimum INTEGER DEFAULT 0, on_hand INTEGER DEFAULT 0)")
+    
 @app.route("/")
 def main_page():
     conn = get_db_connection()
@@ -67,8 +71,13 @@ def main_page():
             'blanket': rec
         })
 
+    hay_bales = conn.execute("SELECT on_hand FROM hay_bales WHERE id = 1").fetchone()
+    bales_on_hand = hay_bales['on_hand'] if hay_bales else ""
+    shavings = conn.execute("SELECT on_hand FROM shavings WHERE id = 1").fetchone()
+    shavings_on_hand = shavings['on_hand'] if shavings else ""
+    
     conn.close()
-    return render_template("main.html", settings=settings, horse_data=horse_data, weather=weather_info, recs=recommendations) 
+    return render_template("main.html", settings=settings, horse_data=horse_data, weather=weather_info, recs=recommendations, bales_on_hand=bales_on_hand, shavings_on_hand=shavings_on_hand) 
 
 @app.route("/add_medication/<int:horse_id>", methods=["POST"])
 def add_medication(horse_id):
@@ -106,17 +115,6 @@ def view_history(horse_id):
     conn.close()
     return render_template("history.html", horse=horse, history=history)
 
-@app.route("/update_inventory/<item>/<int:delta>")
-def update_inventory(item, delta):
-    if item not in ['hay', 'shavings']: return redirect(url_for("main_page"))
-    
-    conn = get_db_connection()
-    # Using MAX(0, ...) to prevent negative inventory
-    conn.execute(f"UPDATE settings SET {item} = MAX(0, {item} + ?) WHERE id = 1", (delta,))
-    conn.commit()
-    conn.close()
-    return redirect(url_for("main_page"))
-
 @app.route("/set_inventory", methods=["POST"])
 def set_inventory():
     hay_count = request.form.get("hay", type=int)
@@ -124,9 +122,9 @@ def set_inventory():
     
     conn = get_db_connection()
     if hay_count is not None:
-        conn.execute("UPDATE settings SET hay = ? WHERE id = 1", (hay_count,))
+        conn.execute("UPDATE hay_bales SET on_hand = ? WHERE id = 1", (hay_count,))
     if shavings_count is not None:
-        conn.execute("UPDATE settings SET shavings = ? WHERE id = 1", (shavings_count,))
+        conn.execute("UPDATE shavings SET on_hand = ? WHERE id = 1", (shavings_count,))
     conn.commit()
     conn.close()
     return redirect(url_for("main_page"))
@@ -186,17 +184,38 @@ def configure_horses():
 @app.route("/configure_settings", methods=["GET", "POST"])
 def configure_settings():
     conn = get_db_connection()
+    veterinarians = conn.execute("SELECT * FROM veterinarians").fetchall()
     if request.method == "POST":
-        new_address = request.form["address"]
-        # Use INSERT OR REPLACE to always update the single address row
-        conn.execute("INSERT OR REPLACE INTO settings (id, address) VALUES (1, ?)", (new_address,))
-        conn.commit()
-        return redirect(url_for("main_page"))
-    
+        if request.form.get('form_id') == 'address_form':
+            new_address = request.form["address"]
+            # Use INSERT OR REPLACE to always update the single address row
+            conn.execute("INSERT OR REPLACE INTO settings (id, address) VALUES (1, ?)", (new_address,))
+            conn.commit()
+            return redirect(url_for("main_page"))
+        if request.form.get('form_id') == 'veterinarian_form':
+            vet_name = request.form["name"]
+            vet_phone = request.form["phone"]
+            conn.execute("INSERT OR REPLACE INTo veterinarians (name, phone) VALUES (?, ?)", (vet_name, vet_phone,))
+            conn.commit()
+            return redirect(url_for("main_page"))
+        if request.form.get('form_id') == 'hay_form':
+            minimum_bales = request.form["minimum_bales"]
+            conn.execute("INSERT OR REPLACE INTo hay_bales (id, minimum) VALUES (1, ?)", (minimum_bales,))
+            conn.commit()
+            return redirect(url_for("main_page"))
+        if request.form.get('form_id') == 'shavings_form':
+            minimum_shavings = request.form["minimum_shavings"]
+            conn.execute("INSERT OR REPLACE INTo shavings (id, minimum) VALUES (1, ?)", (minimum_shavings,))
+            conn.commit()
+            return redirect(url_for("main_page"))
     addr_row = conn.execute("SELECT address FROM settings WHERE id = 1").fetchone()
     current_address = addr_row['address'] if addr_row else ""
+    hay_bales = conn.execute("SELECT minimum FROM hay_bales WHERE id = 1").fetchone()
+    minimum_bales = hay_bales['minimum'] if hay_bales else ""
+    shavings = conn.execute("SELECT minimum FROM shavings WHERE id = 1").fetchone()
+    minimum_shavings = shavings['minimum'] if shavings else ""
     conn.close()
-    return render_template("configure_settings.html", current_address=current_address)
+    return render_template("configure_settings.html", current_address=current_address, veterinarians=veterinarians, minimum_bales=minimum_bales, minimum_shavings=minimum_shavings)
 
 @app.route("/add_blanket/<int:horse_id>", methods=["POST"])
 def add_blanket(horse_id):
